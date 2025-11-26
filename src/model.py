@@ -2,7 +2,11 @@ from dataclasses import dataclass
 from datetime import date
 
 
-@dataclass(frozen=True)
+class OutOfStock(Exception):
+    pass
+
+
+@dataclass(unsafe_hash=True)
 class OrderLine:
     orderid: str
     sku: str
@@ -16,6 +20,13 @@ class Batch:
         self.eta = eta
         self._purchased_quantity = qty
         self._allocations = set()  # тип 'множество': Set[OrderLine]
+
+    def __gt__(self, other):
+        if self.eta is None:
+            return False
+        if other.eta is None:
+            return True
+        return self.eta > other.eta
 
     def allocate(self, line: OrderLine):
         if self.can_allocate(line):
@@ -35,3 +46,12 @@ class Batch:
 
     def can_allocate(self, line: OrderLine) -> bool:
         return self.sku == line.sku and self.available_quantity >= line.qty
+
+
+def allocate(line: OrderLine, batches: list[Batch]) -> str:
+    try:
+        batch = next(b for b in sorted(batches) if b.can_allocate(line))
+        batch.allocate(line)
+    except StopIteration:
+        raise OutOfStock(f"Артикула {line.sku} нет в наличии")
+    return batch.reference
